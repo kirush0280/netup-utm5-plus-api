@@ -1,0 +1,6 @@
+logs/
+config.php
+*.log
+.idea/
+.vscode/
+vendor/
