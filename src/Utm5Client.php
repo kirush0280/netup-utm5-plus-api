@@ -23,8 +23,11 @@ class Utm5Client
     /** @var string Базовый URL биллинга */
     private string $baseUrl;
     
-    /** @var string|null Session ID (токен авторизации) */
+    /** @var string|null Session ID (временный токен, из api/login) */
     private ?string $sessionId = null;
+    
+    /** @var string|null Постоянный токен (из Web-интерфейса администратора) */
+    private ?string $token = null;
     
     /** @var int Таймаут HTTP запросов в секундах */
     private int $timeout;
@@ -85,7 +88,9 @@ class Utm5Client
             $config['log_file'] ?? null
         );
         
-        if (!empty($config['login']) && !empty($config['password'])) {
+        if (!empty($config['token'])) {
+            $client->setToken($config['token']);
+        } elseif (!empty($config['login']) && !empty($config['password'])) {
             $client->login($config['login'], $config['password']);
         }
         
@@ -139,7 +144,7 @@ class Utm5Client
      */
     public function isAuthenticated(): bool
     {
-        return $this->sessionId !== null;
+        return $this->sessionId !== null || $this->token !== null;
     }
     
     /**
@@ -156,6 +161,25 @@ class Utm5Client
     public function setSessionId(string $sessionId): void
     {
         $this->sessionId = $sessionId;
+    }
+    
+    /**
+     * Установить постоянный токен (из Web-интерфейса администратора)
+     * Токен передаётся в cookie "token" при каждом запросе
+     */
+    public function setToken(string $token): void
+    {
+        $this->token = $token;
+        $this->sessionId = null; // постоянный токен имеет приоритет
+        $this->log('INFO', 'Постоянный токен установлен: ' . substr($token, 0, 8) . '...');
+    }
+    
+    /**
+     * Получить постоянный токен
+     */
+    public function getToken(): ?string
+    {
+        return $this->token;
     }
     
     // ==================== Модули API ====================
@@ -297,8 +321,8 @@ class Utm5Client
      */
     public function request(string $method, string $endpoint, array $data = [], bool $auth = true): array
     {
-        if ($auth && !$this->sessionId) {
-            throw new Utm5ApiException('Не авторизован. Вызовите login() перед запросами.');
+        if ($auth && !$this->sessionId && !$this->token) {
+            throw new Utm5ApiException('Не авторизован. Вызовите login() или setToken() перед запросами.');
         }
         
         $url = $this->baseUrl . $endpoint;
@@ -348,9 +372,12 @@ class Utm5Client
             'X-Forwarded-For: ' . $clientIp,
         ];
         
-        if ($auth && $this->sessionId) {
-            $headers[] = 'X-Session-Id: ' . $this->sessionId;
-            $headers[] = 'Cookie: session_id=' . $this->sessionId;
+        if ($auth) {
+            if ($this->token) {
+                $headers[] = 'Cookie: token=' . $this->token;
+            } elseif ($this->sessionId) {
+                $headers[] = 'Cookie: session_id=' . $this->sessionId;
+            }
         }
         
         curl_setopt_array($ch, [
