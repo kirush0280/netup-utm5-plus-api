@@ -71,7 +71,7 @@ class Users extends BaseModule
     /** DELETE /users — удалить */
     public function deleteUser(int $userId): array
     {
-        return $this->delete('/api/users', ['user_id' => $userId]);
+        return $this->delete('/api/users?user_id=' . $userId);
     }
 
     /** POST /users/restore_user — восстановить */
@@ -100,7 +100,49 @@ class Users extends BaseModule
         return $this->post('/api/users/short_search', $criteria);
     }
 
-    /** POST /users/extended_search */
+    /**
+     * POST /users/extended_search — расширенный поиск пользователей по условиям.
+     *
+     * Поддерживает пагинацию (page/per_page) и произвольные фильтры.
+     *
+     * Обязательные ключи в $criteria:
+     *   'page'               => int    — номер страницы (начиная с 1)
+     *   'per_page'           => int    — записей на страницу (макс. 1000)
+     *   'queries_conditions' => string — логика объединения: "and" | "all_for_one"
+     *   'queries'            => array  — массив условий, каждое: ['field' => ..., 'condition' => ..., 'value' => ...]
+     *   'sort_field'         => string — поле сортировки (любое из allowed fields)
+     *   'is_desc'            => bool   — true = DESC, false = ASC
+     *
+     * Допустимые значения 'field':
+     *   "user_id", "login", "password", "balance", "basic_account",
+     *   "full_name", "email", "contract_id", "advance_payment", "till",
+     *   "slink_id", "group_id", "account_id", "house_comment", "comment",
+     *   "service_name", "accounting_period_id", "policy_id", "house_id",
+     *   "service_id", "tariff_id", "parent_id", "ip", "mask", "allowed_cid",
+     *   "mac", "pool_name", "nfprovider_id", "switch_id", "port_id",
+     *   "vlan_id", "pool_id"
+     *
+     * Допустимые значения 'condition':
+     *   "equal", "nonequal", "contain", "noncontain", "greater", "lesser"
+     *
+     * Дополнительные параметры (необязательные):
+     *   'block_type' => string — фильтр по типу блокировки: "none" | "admin" | "system" | "user"
+     *
+     * Ответ: ['total_rows' => int, 'users' => [...]]
+     *
+     * Пример:
+     *   $api->users()->extendedSearch([
+     *       'page'               => 1,
+     *       'per_page'           => 100,
+     *       'queries_conditions' => 'and',
+     *       'queries'            => [
+     *           ['field' => 'login',     'condition' => 'contain', 'value' => 'ser_'],
+     *           ['field' => 'switch_id', 'condition' => 'equal',   'value' => '890'],
+     *       ],
+     *       'sort_field' => 'login',
+     *       'is_desc'    => false,
+     *   ]);
+     */
     public function extendedSearch(array $criteria): array
     {
         return $this->post('/api/users/extended_search', $criteria);
